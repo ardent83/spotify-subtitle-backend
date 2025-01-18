@@ -26,10 +26,19 @@ class Segment(models.Model):
         ordering = ('subtitle', 'segment_number')
         constraints = [
             models.CheckConstraint(
+                check=Q(segment_number__gt=0),
+                name='segment_number_positive',
+            ),
+            models.CheckConstraint(
                 check=Q(start_time__lt=F('end_time')),
                 name='start_before_end',
+            ),
+            models.UniqueConstraint(
+                fields=['subtitle', 'segment_number'],
+                name='unique_segment_number_per_subtitle',
             )
         ]
 
     def __str__(self):
         return f"Text: {self.text}"
+

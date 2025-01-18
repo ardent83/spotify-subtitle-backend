@@ -1,7 +1,13 @@
 from django.urls import path
-from . import views
+from .views import SubtitleUploadAPIView, Logout, login, Register, ValidToken, SubtitleRetrieveAPIView
 
 urlpatterns = [
-    path('add-subtitle/', views.add_subtitle, name='add_subtitle'),
-    path('get-subtitle/<str:song_id>/', views.get_subtitles, name='get_subtitles')
+    path('login/', login),
+    path('logout/', Logout.as_view()),
+    path('register/', Register.as_view()),
+    path('validate-token/', ValidToken.as_view(), name='validate-token'),
+
+    path('upload/', SubtitleUploadAPIView.as_view(), name='upload-subtitle'),
+    path('subtitle/<str:song_id>/', SubtitleRetrieveAPIView.as_view(), name='subtitle'),
+    # path('subtitles/') create a view for return list of subtitles that own to user self
 ]
