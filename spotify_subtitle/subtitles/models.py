@@ -42,3 +42,21 @@ class Segment(models.Model):
     def __str__(self):
         return f"Text: {self.text}"
 
+
+class AccessRefreshToken(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    access_token = models.CharField(max_length=1024)
+    refresh_token = models.CharField(max_length=1024)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Tokens for {self.user.username}"
+
+
+class UserSpotifyState(models.Model):
+    user_id = models.IntegerField(unique=True)
+    state = models.CharField(max_length=256, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"User {self.user_id} - State {self.state}"

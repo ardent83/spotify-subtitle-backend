@@ -1,10 +1,11 @@
 import os
+import requests
 
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from ..models import Subtitle, Segment
+from ..models import Subtitle, Segment, AccessRefreshToken
 from ..serializers import SubtitleSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
 import re
@@ -16,9 +17,20 @@ class SubtitleUploadAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         file = request.FILES.get('file')
-        print(type(file))
-        song_id = request.data.get('song_id')
-        print(file, song_id)
+        access_token = AccessRefreshToken.objects.get(user=request).access_token
+        if not access_token:
+            return Response(data={"success": False, "error": "Access token not found."},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        headers = {
+            "Authorization": f"Bearer {access_token}"
+        }
+        response = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
+        song_id = None
+        if response.status_code == 200:
+            data = response.json()
+            song_id = data.get("item", {}).get("id")
+
         if not file:
             return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -26,7 +38,7 @@ class SubtitleUploadAPIView(APIView):
             return Response({"error": "No song ID provided."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            #must be lock?
+            # must be lock?
             save_path = os.path.join("temp", 'uploaded_subtitle.srt')
 
             with open(save_path, 'wb') as destination:
@@ -94,16 +106,41 @@ class SubtitleUploadAPIView(APIView):
         return segments
 
 
-class SubtitleRetrieveAPIView(APIView):
+class NowPlayingAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, song_id, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         try:
-            subtitle = Subtitle.objects.get(song_id=song_id, user=request.user)
-            serializer = SubtitleSerializer(subtitle)
-            return Response(data={"success": True, "subtitle": serializer.data}, status=status.HTTP_200_OK)
-        except Subtitle.DoesNotExist:
-            return Response(data={"success": False, "error": "Subtitle not found or you don't have access."},
+            access_token = AccessRefreshToken.objects.get(user=request.user).access_token
+            if not access_token:
+                return Response(data={"success": False, "error": "Access token not found."},
+                                status=status.HTTP_401_UNAUTHORIZED)
+
+            headers = {
+                "Authorization": f"Bearer {access_token}"
+            }
+            response = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                song_id = data.get("item", {}).get("id")
+                if song_id:
+                    try:
+                        subtitle = Subtitle.objects.get(song_id=song_id, user=request.user)
+                        serializer = SubtitleSerializer(subtitle)
+                        return Response(data={"success": True, "subtitle": serializer.data}, status=status.HTTP_200_OK)
+                    except Subtitle.DoesNotExist:
+                        return Response(
+                            data={"success": False, "error": "Subtitle not found or you don't have access."},
                             status=status.HTTP_404_NOT_FOUND)
+                else:
+                    return Response(data={"success": False, "error": "Song ID not found."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+            elif response.status_code == 204:
+                return Response(
+                    data={"success": True, "now_playing": None, "message": "No track is currently playing."},
+                    status=status.HTTP_200_OK)
+            else:
+                return Response(data={"success": False, "error": "Failed to fetch currently playing track.",
+                                      "details": response.json()}, status=response.status_code)
         except Exception as e:
             return Response(data={"success": False, "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

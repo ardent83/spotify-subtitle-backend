@@ -22,6 +22,7 @@ class Logout(APIView):
 
     def post(self, request):
         request.user.auth_token.delete()
+        request.session.flush()
         return Response(data={"message": f"Bye {request.user.username}!"}, status=status.HTTP_204_NO_CONTENT)
 
 

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Subtitle, User, Segment
+from .models import Subtitle, User, Segment, AccessRefreshToken
 
 
 class SegmentSerializer(serializers.ModelSerializer):
@@ -23,3 +23,9 @@ class SubtitleSerializer(serializers.ModelSerializer):
         model = Subtitle
         fields = ['id', 'song_id', 'user', 'segments', 'created_at']
         read_only_fields = ['id', 'created_at', 'user']
+
+
+class AccessTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccessRefreshToken
+        fields = ['user', 'access_token', 'refresh_token', 'created_at']
