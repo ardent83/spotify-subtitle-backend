@@ -1,17 +1,17 @@
 from django.contrib import admin
-from .models import Subtitle, Segment, AccessRefreshToken, UserSpotifyState
+from subtitles.models import Subtitle, Segment, AccessRefreshToken, UserSpotifyState, Like, UserActiveSubtitle
 
 
 @admin.register(Subtitle)
 class SubtitleAdmin(admin.ModelAdmin):
-    list_display = ('song_id', 'user', 'created_at')
+    list_display = ('song_id', 'title', 'user', 'is_public', 'language', 'likes_count', 'created_at')
     search_fields = ('song_id', 'user__username')
 
 
 @admin.register(Segment)
 class SegmentAdmin(admin.ModelAdmin):
     list_display = ('subtitle', 'segment_number', 'formatted_start_time', 'formatted_end_time', 'short_text')
-
+    list_filter = ('subtitle',)
     def formatted_start_time(self, obj):
         return self.format_time(obj.start_time)
     formatted_start_time.short_description = 'Start Time'
@@ -32,9 +32,19 @@ class SegmentAdmin(admin.ModelAdmin):
 
 @admin.register(AccessRefreshToken)
 class AccessRefreshTokenAdmin(admin.ModelAdmin):
-    list_display = ('user', 'created_at')
+    list_display = ('user__username', 'created_at')
 
 
 @admin.register(UserSpotifyState)
 class UserSpotifyStateAdmin(admin.ModelAdmin):
     list_display = ('user_id', 'created_at')
+
+
+@admin.register(Like)
+class LikeAdmin(admin.ModelAdmin):
+    list_display = ('user_id', 'subtitle')
+
+
+@admin.register(UserActiveSubtitle)
+class UserActiveSubtitleAdmin(admin.ModelAdmin):
+    list_display = ('user_id', 'song_id')

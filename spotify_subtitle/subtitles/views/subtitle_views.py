@@ -1,146 +1,182 @@
-import os
-import requests
-
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, BasePermission
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from ..models import Subtitle, Segment, AccessRefreshToken
-from ..serializers import SubtitleSerializer
 from rest_framework.parsers import MultiPartParser, FormParser
-import re
+from drf_spectacular.utils import extend_schema
+from ..models import Subtitle
+from ..serializers import SubtitleSerializer
+from ..services import SubtitleService, SpotifyService
 
 
-class SubtitleUploadAPIView(APIView):
+class IsOwner(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        return obj.user == request.user
+
+
+class SubtitleListCreateAPIView(APIView):
+    serializer_class = SubtitleSerializer
     parser_classes = (MultiPartParser, FormParser)
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=SubtitleSerializer,
+        responses={201: SubtitleSerializer}
+    )
     def post(self, request, *args, **kwargs):
-        file = request.FILES.get('file')
-        access_token = AccessRefreshToken.objects.get(user=request).access_token
-        if not access_token:
-            return Response(data={"success": False, "error": "Access token not found."},
-                            status=status.HTTP_401_UNAUTHORIZED)
-
-        headers = {
-            "Authorization": f"Bearer {access_token}"
-        }
-        response = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
-        song_id = None
-        if response.status_code == 200:
-            data = response.json()
-            song_id = data.get("item", {}).get("id")
-
-        if not file:
-            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not song_id:
-            return Response({"error": "No song ID provided."}, status=status.HTTP_400_BAD_REQUEST)
-
+        service = SubtitleService()
         try:
-            # must be lock?
-            save_path = os.path.join("temp", 'uploaded_subtitle.srt')
-
-            with open(save_path, 'wb') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
-
-            print(f"File saved at: {save_path}")
-            with open(save_path, 'r', encoding='utf-8') as saved_file:
-                saved_content = saved_file.read()
-                print(f"Saved file content: \n{saved_content}")
-
-            segments_data = self.parse_srt(saved_content)
-
-            subtitle = Subtitle.objects.create(
-                song_id=song_id,
-                user=request.user
-            )
-
-            for segment_data in segments_data:
-                Segment.objects.create(
-                    subtitle=subtitle,
-                    segment_number=segment_data['segment_number'],
-                    start_time=segment_data['start_time'],
-                    end_time=segment_data['end_time'],
-                    text=segment_data['text']
-                )
-
-            serializer = SubtitleSerializer(subtitle)
+            subtitle = service.create_subtitle(request.data, request.user)
+            serializer = SubtitleSerializer(subtitle, context={'request': request})
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        except UnicodeDecodeError:
-            return Response({"error": "The file encoding is not valid UTF-8."}, status=status.HTTP_400_BAD_REQUEST)
-        except ValueError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    def parse_srt(self, srt_content):
-        segments = []
-        if not srt_content:
-            raise ValueError("The SRT file is empty.")
-
-        # Regex pattern to parse SRT content
-        pattern = re.compile(
-            r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n([\s\S]*?)(?=\n\d+\n|\Z)', re.DOTALL
-        )
-
-        matches = pattern.findall(srt_content)
-
-        if not matches:
-            raise ValueError("The SRT file format is invalid.")
-
-        for match in matches:
-            segment_number, start_time, end_time, text = match
-            start_time = start_time.replace(',', '.')
-            end_time = end_time.replace(',', '.')
-            segments.append({
-                'segment_number': int(segment_number),
-                'start_time': start_time,
-                'end_time': end_time,
-                'text': text.strip()
-            })
-
-        return segments
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class NowPlayingAPIView(APIView):
+class SubtitleDetailAPIView(APIView):
+    serializer_class = SubtitleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object_and_check_perm(self, subtitle_id, user, check_owner=False):
+        try:
+            subtitle = Subtitle.objects.select_related('user').get(id=subtitle_id)
+            if check_owner and subtitle.user != user:
+                raise PermissionError("Permission denied.")
+            if not subtitle.is_public and subtitle.user != user:
+                raise PermissionError("This subtitle is private.")
+            return subtitle
+        except Subtitle.DoesNotExist:
+            return None
+
+    def get(self, request, subtitle_id, *args, **kwargs):
+        try:
+            subtitle = self.get_object_and_check_perm(subtitle_id, request.user)
+            if not subtitle:
+                return Response({"error": "Subtitle not found."}, status=status.HTTP_404_NOT_FOUND)
+            serializer = SubtitleSerializer(subtitle, context={'request': request})
+            return Response(serializer.data)
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+    def put(self, request, subtitle_id, *args, **kwargs):
+        try:
+            subtitle = self.get_object_and_check_perm(subtitle_id, request.user, check_owner=True)
+            if not subtitle:
+                return Response({"error": "Subtitle not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            service = SubtitleService()
+            updated_subtitle = service.update_subtitle(subtitle, request.user, request.data)
+            serializer = SubtitleSerializer(updated_subtitle, context={'request': request})
+            return Response(serializer.data)
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, subtitle_id, *args, **kwargs):
+        try:
+            subtitle = self.get_object_and_check_perm(subtitle_id, request.user, check_owner=True)
+            if not subtitle:
+                return Response({"error": "Subtitle not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            service = SubtitleService()
+            service.delete_subtitle(subtitle, request.user)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+
+class ToggleLikeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, subtitle_id, *args, **kwargs):
+        try:
+            subtitle = Subtitle.objects.get(id=subtitle_id)
+            service = SubtitleService()
+            is_liked, likes_count = service.toggle_like(request.user, subtitle)
+            return Response({'is_liked': is_liked, 'likes_count': likes_count})
+        except Subtitle.DoesNotExist:
+            return Response({"error": "Subtitle not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+class LikedSubtitlesListView(APIView):
+    serializer_class = SubtitleSerializer
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        try:
-            access_token = AccessRefreshToken.objects.get(user=request.user).access_token
-            if not access_token:
-                return Response(data={"success": False, "error": "Access token not found."},
-                                status=status.HTTP_401_UNAUTHORIZED)
+        service = SubtitleService()
+        subtitles = service.get_liked_subtitles(request.user)
+        serializer = SubtitleSerializer(subtitles, many=True, context={'request': request})
+        return Response(serializer.data)
 
-            headers = {
-                "Authorization": f"Bearer {access_token}"
-            }
-            response = requests.get("https://api.spotify.com/v1/me/player/currently-playing", headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                song_id = data.get("item", {}).get("id")
-                if song_id:
-                    try:
-                        subtitle = Subtitle.objects.get(song_id=song_id, user=request.user)
-                        serializer = SubtitleSerializer(subtitle)
-                        return Response(data={"success": True, "subtitle": serializer.data}, status=status.HTTP_200_OK)
-                    except Subtitle.DoesNotExist:
-                        return Response(
-                            data={"success": False, "error": "Subtitle not found or you don't have access."},
+
+class NowPlayingAPIView(APIView):
+    serializer_class = SubtitleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        spotify_service = SpotifyService(user=request.user)
+        song_id = spotify_service.get_now_playing_song_id()
+
+        if not song_id:
+            return Response(data={"success": True, "message": "No track found."}, status=status.HTTP_200_OK)
+
+        subtitle_service = SubtitleService()
+        active_subtitle = subtitle_service.get_active_subtitle_for_song(request.user, song_id)
+
+        if not active_subtitle:
+            return Response(data={"success": False, "error": "No active subtitle set for this song."},
                             status=status.HTTP_404_NOT_FOUND)
-                else:
-                    return Response(data={"success": False, "error": "Song ID not found."},
-                                    status=status.HTTP_400_BAD_REQUEST)
-            elif response.status_code == 204:
-                return Response(
-                    data={"success": True, "now_playing": None, "message": "No track is currently playing."},
-                    status=status.HTTP_200_OK)
-            else:
-                return Response(data={"success": False, "error": "Failed to fetch currently playing track.",
-                                      "details": response.json()}, status=response.status_code)
-        except Exception as e:
-            return Response(data={"success": False, "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        serializer = SubtitleSerializer(active_subtitle, context={'request': request})
+        return Response(data={"success": True, "subtitle": serializer.data}, status=status.HTTP_200_OK)
+
+
+class SongSubtitleListView(APIView):
+    serializer_class = SubtitleSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, song_id, *args, **kwargs):
+        service = SubtitleService()
+
+        filters = {
+            'language': request.query_params.get('language', None),
+            'by_user': request.query_params.get('by_user', None),
+            'sort_by': request.query_params.get('sort_by', 'likes_desc'),
+        }
+
+        subtitles = service.get_available_subtitles_for_song(song_id, request.user, filters)
+        serializer = SubtitleSerializer(subtitles, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SetActiveSubtitleView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, subtitle_id, *args, **kwargs):
+        try:
+            subtitle_to_set = Subtitle.objects.get(id=subtitle_id)
+            service = SubtitleService()
+            service.set_active_subtitle(request.user, subtitle_to_set.song_id, subtitle_to_set)
+            return Response({"success": True, "message": "Active subtitle has been set."}, status=status.HTTP_200_OK)
+        except Subtitle.DoesNotExist:
+            return Response({"error": "Subtitle not found."}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+
+class GetActiveSubtitleForSongView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, song_id, *args, **kwargs):
+        service = SubtitleService()
+        active_subtitle = service.get_active_subtitle_for_song(request.user, song_id)
+
+        if not active_subtitle:
+            return Response(
+                {"error": "No active subtitle set for this song."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = SubtitleSerializer(active_subtitle, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
