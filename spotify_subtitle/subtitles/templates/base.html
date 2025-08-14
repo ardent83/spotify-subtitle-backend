@@ -1,0 +1,39 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Subtitle Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'custom-dark': '#121212',
+                        'custom-gray': '#5a5a5b',
+                        'custom-gray-medium': '#1f1f1f',
+                        'custom-gray-light': '#2a2a2a',
+                        'custom-text-primary': '#ffffff',
+                        'custom-text-secondary': '#b3b3b3',
+                        'custom-placeholder': '#8b8b8b',
+                        'spotify-green': '#1ed760',
+                        'stateerror': '#ed2c3f',
+                        'statesuccess': '#1ed760',
+                        'statewarning': '#ffa42b',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-custom-dark text-custom-text-secondary">
+    <div class="p-4 flex items-center justify-center min-h-screen" style="width: 380px; margin: auto;">
+        <div class="w-full">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+</body>
+</html>

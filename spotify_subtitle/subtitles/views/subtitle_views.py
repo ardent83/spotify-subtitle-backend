@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema
 from ..models import Subtitle
 from ..serializers import SubtitleSerializer
@@ -116,7 +117,7 @@ class NowPlayingAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         spotify_service = SpotifyService(user=request.user)
-        song_id = spotify_service.get_now_playing_song_id()
+        song_id = request.GET.get('songId', None) or spotify_service.get_now_playing_song_id()
 
         if not song_id:
             return Response(data={"success": True, "message": "No track found."}, status=status.HTTP_200_OK)
@@ -132,22 +133,31 @@ class NowPlayingAPIView(APIView):
         return Response(data={"success": True, "subtitle": serializer.data}, status=status.HTTP_200_OK)
 
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 4
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class SongSubtitleListView(APIView):
     serializer_class = SubtitleSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get(self, request, song_id, *args, **kwargs):
         service = SubtitleService()
-
         filters = {
             'language': request.query_params.get('language', None),
             'by_user': request.query_params.get('by_user', None),
             'sort_by': request.query_params.get('sort_by', 'likes_desc'),
         }
+        subtitles_queryset = service.get_available_subtitles_for_song(song_id, request.user, filters)
 
-        subtitles = service.get_available_subtitles_for_song(song_id, request.user, filters)
-        serializer = SubtitleSerializer(subtitles, many=True, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        paginator = self.pagination_class()
+        paginated_subtitles = paginator.paginate_queryset(subtitles_queryset, request, view=self)
+        serializer = SubtitleSerializer(paginated_subtitles, many=True, context={'request': request})
+
+        return paginator.get_paginated_response(serializer.data)
 
 
 class SetActiveSubtitleView(APIView):

@@ -1,3 +1,6 @@
+from allauth.socialaccount.models import SocialAccount
+from django.contrib.auth.models import User
+
 import requests
 import base64
 import uuid
@@ -139,3 +142,30 @@ class SpotifyService:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
+
+    def exchange_code_for_user(self, code, state):
+        user_info = UserSpotifyState.objects.get(state=state)
+        user_info.delete()
+
+        token_data = self.exchange_code_for_tokens(code, state)
+        access_token = token_data.get('access_token')
+
+        headers = {'Authorization': f'Bearer {access_token}'}
+        response = requests.get(f"{self.API_BASE_URL}/v1/me", headers=headers)
+        response.raise_for_status()
+        spotify_data = response.json()
+
+        spotify_id = spotify_data['id']
+        email = spotify_data.get('email', f'{spotify_id}@spotify.user')
+
+        try:
+            social_account = SocialAccount.objects.get(provider='spotify', uid=spotify_id)
+            user = social_account.user
+        except SocialAccount.DoesNotExist:
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={'username': spotify_id}
+            )
+            SocialAccount.objects.create(user=user, provider='spotify', uid=spotify_id)
+
+        return user

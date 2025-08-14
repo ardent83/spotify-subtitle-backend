@@ -15,7 +15,9 @@ from .views import (
     LikedSubtitlesListView,
     SpotifyTrackInfoView,
     GetActiveSubtitleForSongView,
-    LanguageListView
+    LanguageListView,
+    ExtensionSpotifyCallbackAPIView,
+    SpotifyConnectRedirectView
 )
 
 urlpatterns = [
@@ -25,6 +27,7 @@ urlpatterns = [
     path('auth/valid_session/', ValidSessionView.as_view(), name='valid_session'),
 
     path('spotify/generate_spotify_auth_url/', SpotifyAuthURLView.as_view(), name='generate_spotify_auth_url'),
+    path('spotify/connect', SpotifyConnectRedirectView.as_view(), name='spotify-connect'),
     path('spotify/callback/', SpotifyCallbackView.as_view(), name='spotify_callback'),
     path('spotify/track/<str:song_id>/', SpotifyTrackInfoView.as_view(), name='spotify-track-info'),
 
@@ -40,4 +43,6 @@ urlpatterns = [
          name='get-active-subtitle-for-song'),
 
     path('enums/languages/', LanguageListView.as_view(), name='language-list'),
+
+    path('spotify/extension-callback/', ExtensionSpotifyCallbackAPIView.as_view(), name='spotify-extension-callback'),
 ]

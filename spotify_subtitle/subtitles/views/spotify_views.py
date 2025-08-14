@@ -2,6 +2,9 @@ from django.http import JsonResponse
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from ..services import SpotifyService
+from django.shortcuts import redirect
+from django.views import View
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 
 class SpotifyAuthURLView(APIView):
@@ -11,6 +14,13 @@ class SpotifyAuthURLView(APIView):
         service = SpotifyService(user=request.user)
         auth_url = service.generate_auth_url()
         return JsonResponse({'auth_url': auth_url})
+
+
+class SpotifyConnectRedirectView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        service = SpotifyService(user=request.user)
+        auth_url = service.generate_auth_url()
+        return redirect(auth_url)
 
 
 class SpotifyCallbackView(APIView):

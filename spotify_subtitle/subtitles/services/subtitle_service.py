@@ -3,6 +3,10 @@ from django.db import transaction
 from django.db.models import Q
 from ..models import Subtitle, Segment, Like, UserActiveSubtitle
 from datetime import datetime, timedelta
+from ..utils import generate_srt_from_text
+
+MAX_FILE_SIZE_MB = 3
+MAX_TEXT_INPUT_CHARS = 10000
 
 
 class SubtitleService:
@@ -70,20 +74,31 @@ class SubtitleService:
             })
         return segments_data
 
-    def _get_segments_from_file(self, file):
-        content = file.read().decode('utf-8')
-        filename = file.name.lower()
+    def _get_segments_from_data(self, data):
+        file = data.get('file')
+        raw_text = data.get('raw_text')
 
-        if filename.endswith('.srt'):
-            return self._parse_srt(content)
-        elif filename.endswith('.lrc'):
-            return self._parse_lrc(content)
+        if file:
+            if file.size > MAX_FILE_SIZE_MB * 1024 * 1024:
+                raise ValueError(f"File size cannot exceed {MAX_FILE_SIZE_MB}MB.")
+            content = file.read().decode('utf-8')
+            filename = file.name.lower()
+            if filename.endswith('.srt'):
+                return self._parse_srt(content)
+            elif filename.endswith('.lrc'):
+                return self._parse_lrc(content)
+            else:
+                raise ValueError("Unsupported file format.")
+        elif raw_text:
+            if len(raw_text) > MAX_TEXT_INPUT_CHARS:
+                raise ValueError(f"Text input cannot exceed {MAX_TEXT_INPUT_CHARS} characters.")
+            srt_content = generate_srt_from_text(raw_text)
+            return self._parse_srt(srt_content)
         else:
-            raise ValueError("Unsupported file format. Please upload .srt or .lrc files.")
+            raise ValueError("Either a file or raw text must be provided.")
 
     def create_subtitle(self, data, user):
-        segments_data = self._get_segments_from_file(data['file'])
-
+        segments_data = self._get_segments_from_data(data)
         language_code = data.get('language', 'en')
         is_public_status = str(data.get('is_public', 'true')).lower() == 'true'
 
@@ -94,7 +109,6 @@ class SubtitleService:
             is_public=is_public_status,
             title=data.get('title', 'Untitled')
         )
-
         segments_to_create = [Segment(subtitle=subtitle, **seg_data) for seg_data in segments_data]
         Segment.objects.bulk_create(segments_to_create)
         return subtitle
@@ -108,8 +122,8 @@ class SubtitleService:
         if 'is_public' in data:
             subtitle.is_public = str(data.get('is_public')).lower() == 'true'
 
-        if 'file' in data:
-            segments_data = self._get_segments_from_file(data['file'])
+        if data.get('file') or data.get('raw_text'):
+            segments_data = self._get_segments_from_data(data)
             with transaction.atomic():
                 subtitle.segments.all().delete()
                 segments_to_create = [Segment(subtitle=subtitle, **seg_data) for seg_data in segments_data]

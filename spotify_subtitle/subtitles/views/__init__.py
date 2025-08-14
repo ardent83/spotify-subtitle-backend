@@ -9,9 +9,10 @@ from .subtitle_views import (
     LikedSubtitlesListView,
     GetActiveSubtitleForSongView
 )
-from .spotify_views import SpotifyCallbackView, SpotifyAuthURLView
+from .spotify_views import SpotifyCallbackView, SpotifyAuthURLView, SpotifyConnectRedirectView
 from .spotify_proxy_views import SpotifyTrackInfoView
 from .enums_view import LanguageListView
+from .spotify_auth_views import ExtensionSpotifyCallbackAPIView
 
 __all__ = [
     'RegisterView', 'LoginView', 'LogoutView', 'ValidSessionView',
@@ -22,5 +23,6 @@ __all__ = [
     'LikedSubtitlesListView',
     'SpotifyCallbackView', 'SpotifyAuthURLView',
     'SpotifyTrackInfoView', 'GetActiveSubtitleForSongView',
-    'LanguageListView'
+    'LanguageListView',
+    'ExtensionSpotifyCallbackAPIView', 'SpotifyConnectRedirectView'
 ]

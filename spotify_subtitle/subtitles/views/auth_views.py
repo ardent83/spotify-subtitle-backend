@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from ..serializers.auth import UserSerializer
+from ..models import AccessRefreshToken
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -33,10 +34,16 @@ class LogoutView(APIView):
 
 
 class ValidSessionView(APIView):
-    permission_classes = (IsAuthenticated,)
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        return Response(data={"valid": True, "user": request.user.username}, status=status.HTTP_200_OK)
+        user = request.user
+        has_spotify_token = AccessRefreshToken.objects.filter(user=user).exists()
+
+        return Response({
+            "user": user.username,
+            "has_spotify_token": has_spotify_token
+        })
 
 
 class RegisterView(CreateAPIView):
