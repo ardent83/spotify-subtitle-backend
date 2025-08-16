@@ -3,9 +3,10 @@ from pathlib import Path
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = config('SECRET_KEY')
+
+SECRET_KEY = config('SECRET_KEY', default='dummy-secret-key-for-build-time')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=Csv())
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -16,21 +17,16 @@ INSTALLED_APPS = [
     'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-
     'subtitles',
-
     'rest_framework',
     'rest_framework.authtoken',
-
     'drf_spectacular',
     'corsheaders',
-
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
     'allauth.socialaccount.providers.spotify',
     'widget_tweaks',
-
     'dj_rest_auth',
     'dj_rest_auth.registration',
 ]
@@ -65,22 +61,25 @@ TEMPLATES = [
     },
 ]
 WSGI_APPLICATION = 'spotify_subtitle.wsgi.application'
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
+        'NAME': config('DB_NAME', default='dummy_db'),
+        'USER': config('DB_USER', default='dummy_user'),
+        'PASSWORD': config('DB_PASSWORD', default='dummy_pass'),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default=5432, cast=int),
     }
 }
+
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -104,8 +103,8 @@ REST_FRAMEWORK = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv())
-CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv())
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173', cast=Csv)
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://localhost:5173', cast=Csv)
 
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
@@ -114,8 +113,8 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = False
 
-SPOTIFY_CLIENT_ID = config('SPOTIFY_CLIENT_ID')
-SPOTIFY_CLIENT_SECRET = config('SPOTIFY_CLIENT_SECRET')
+SPOTIFY_CLIENT_ID = config('SPOTIFY_CLIENT_ID', default='dummy_id')
+SPOTIFY_CLIENT_SECRET = config('SPOTIFY_CLIENT_SECRET', default='dummy_secret')
 
 SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
@@ -131,7 +130,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 SITE_ID = 1
-LOGIN_REDIRECT_URL = config('LOGIN_REDIRECT_URL')
+LOGIN_REDIRECT_URL = config('LOGIN_REDIRECT_URL', default='http://localhost:5173')
 ACCOUNT_LOGOUT_ON_GET = True
 SOCIALACCOUNT_LOGIN_ON_GET = True
 
