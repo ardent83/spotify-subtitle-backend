@@ -1,12 +1,11 @@
-from allauth.socialaccount.signals import pre_social_login
+from allauth.account.signals import user_logged_in
 from django.dispatch import receiver
 from .models import AccessRefreshToken
 
 
-@receiver(pre_social_login)
-def save_spotify_tokens(sender, request, sociallogin, **kwargs):
-    if sociallogin.account.provider == 'spotify':
-        user = sociallogin.user
+@receiver(user_logged_in)
+def save_spotify_tokens_on_login(sender, request, user, sociallogin=None, **kwargs):
+    if sociallogin and sociallogin.account.provider == 'spotify':
         token = sociallogin.token
 
         AccessRefreshToken.objects.update_or_create(
