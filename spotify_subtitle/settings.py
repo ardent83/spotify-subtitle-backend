@@ -28,7 +28,6 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
-    'allauth.socialaccount.providers.spotify',
     'widget_tweaks',
     'dj_rest_auth',
     'dj_rest_auth.registration',
@@ -134,20 +133,14 @@ AUTHENTICATION_BACKENDS = [
 
 SITE_ID = 1
 LOGIN_REDIRECT_URL = config('LOGIN_REDIRECT_URL', default='http://localhost:5173')
-ACCOUNT_LOGOUT_ON_GET = True
-SOCIALACCOUNT_LOGIN_ON_GET = True
+# ACCOUNT_LOGOUT_ON_GET = False
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-SOCIALACCOUNT_PROVIDERS = {
-    'spotify': {
-        'SCOPE': [
-            'user-read-playback-state',
-            'user-read-currently-playing',
-            'user-read-recently-played',
-        ]
-    }
+ACCOUNT_AUTHENTICATION_METHOD = 'email'
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_EMAIL_VERIFICATION = 'optional'
+
+REST_AUTH = {
+    'REGISTER_SERIALIZER': 'subtitles.serializers.auth.CustomRegisterSerializer',
 }
-
-ACCOUNT_AUTHENTICATION_METHOD = 'username'
-ACCOUNT_EMAIL_REQUIRED = False
-ACCOUNT_USERNAME_REQUIRED = True
-ACCOUNT_EMAIL_VERIFICATION = 'none'

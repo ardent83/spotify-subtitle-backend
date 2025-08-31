@@ -1,4 +1,4 @@
-from rest_framework.permissions import IsAuthenticated, BasePermission
+from rest_framework.permissions import IsAuthenticated, BasePermission, AllowAny
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -7,7 +7,7 @@ from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema
 from ..models import Subtitle
 from ..serializers import SubtitleSerializer
-from ..services import SubtitleService, SpotifyService
+from ..services import SubtitleService
 
 
 class IsOwner(BasePermission):
@@ -113,23 +113,30 @@ class LikedSubtitlesListView(APIView):
 
 class NowPlayingAPIView(APIView):
     serializer_class = SubtitleSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        spotify_service = SpotifyService(user=request.user)
-        song_id = request.GET.get('songId', None) or spotify_service.get_now_playing_song_id()
-
+        song_id = request.GET.get('songId', None)
         if not song_id:
-            return Response(data={"success": True, "message": "No track found."}, status=status.HTTP_200_OK)
+            return Response(data={"success": False, "error": "Song ID is required."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         subtitle_service = SubtitleService()
-        active_subtitle = subtitle_service.get_active_subtitle_for_song(request.user, song_id)
+        subtitle = None
 
-        if not active_subtitle:
-            return Response(data={"success": False, "error": "No active subtitle set for this song."},
+        if request.user.is_authenticated:
+            subtitle = subtitle_service.get_active_subtitle_for_song(request.user, song_id)
+            print(f"{request.user}: {subtitle.id}")
+
+        if not subtitle:
+            language = request.GET.get('language', "en")
+            subtitle = subtitle_service.get_best_public_subtitle(song_id, language)
+
+        if not subtitle:
+            return Response(data={"success": False, "error": "No suitable subtitle found for this song."},
                             status=status.HTTP_404_NOT_FOUND)
 
-        serializer = SubtitleSerializer(active_subtitle, context={'request': request})
+        serializer = SubtitleSerializer(subtitle, context={'request': request})
         return Response(data={"success": True, "subtitle": serializer.data}, status=status.HTTP_200_OK)
 
 
@@ -152,11 +159,9 @@ class SongSubtitleListView(APIView):
             'sort_by': request.query_params.get('sort_by', 'likes_desc'),
         }
         subtitles_queryset = service.get_available_subtitles_for_song(song_id, request.user, filters)
-
         paginator = self.pagination_class()
         paginated_subtitles = paginator.paginate_queryset(subtitles_queryset, request, view=self)
         serializer = SubtitleSerializer(paginated_subtitles, many=True, context={'request': request})
-
         return paginator.get_paginated_response(serializer.data)
 
 
@@ -168,6 +173,7 @@ class SetActiveSubtitleView(APIView):
             subtitle_to_set = Subtitle.objects.get(id=subtitle_id)
             service = SubtitleService()
             service.set_active_subtitle(request.user, subtitle_to_set.song_id, subtitle_to_set)
+            print(f"{request.user}: {subtitle_id}")
             return Response({"success": True, "message": "Active subtitle has been set."}, status=status.HTTP_200_OK)
         except Subtitle.DoesNotExist:
             return Response({"error": "Subtitle not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -181,12 +187,12 @@ class GetActiveSubtitleForSongView(APIView):
     def get(self, request, song_id, *args, **kwargs):
         service = SubtitleService()
         active_subtitle = service.get_active_subtitle_for_song(request.user, song_id)
-
         if not active_subtitle:
-            return Response(
-                {"error": "No active subtitle set for this song."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
+            return Response({"error": "No active subtitle set for this song."}, status=status.HTTP_404_NOT_FOUND)
         serializer = SubtitleSerializer(active_subtitle, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, song_id, *args, **kwargs):
+        service = SubtitleService()
+        service.unset_active_subtitle(request.user, song_id)
+        return Response(status=status.HTTP_204_NO_CONTENT)
