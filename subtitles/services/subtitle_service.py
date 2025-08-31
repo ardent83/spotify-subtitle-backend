@@ -154,6 +154,16 @@ class SubtitleService:
     def get_liked_subtitles(self, user):
         return Subtitle.objects.filter(likes__user=user).order_by('-likes__created_at')
 
+    def get_best_public_subtitle(self, song_id, language):
+        if not language:
+            return None
+
+        return Subtitle.objects.filter(
+            song_id=song_id,
+            language=language,
+            is_public=True
+        ).order_by('-likes_count').first()
+
     def get_available_subtitles_for_song(self, song_id, user, filters=None):
         if filters is None:
             filters = {}
@@ -183,6 +193,10 @@ class SubtitleService:
             user=user, song_id=song_id, defaults={'active_subtitle': subtitle}
         )
         return True
+
+    def unset_active_subtitle(self, user, song_id):
+        deleted_count, _ = UserActiveSubtitle.objects.filter(user=user, song_id=song_id).delete()
+        return deleted_count > 0
 
     def get_active_subtitle_for_song(self, user, song_id):
         try:

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from subtitles.models import Subtitle, Segment, AccessRefreshToken, UserSpotifyState, Like, UserActiveSubtitle
+from subtitles.models import Subtitle, Segment, Like, UserActiveSubtitle
 
 
 @admin.register(Subtitle)
@@ -28,16 +28,6 @@ class SegmentAdmin(admin.ModelAdmin):
         return obj.text[:15] + '...' if len(obj.text) > 50 else obj.text
 
     short_text.short_description = 'Text'
-
-
-@admin.register(AccessRefreshToken)
-class AccessRefreshTokenAdmin(admin.ModelAdmin):
-    list_display = ('user__username', 'created_at')
-
-
-@admin.register(UserSpotifyState)
-class UserSpotifyStateAdmin(admin.ModelAdmin):
-    list_display = ('user_id', 'created_at')
 
 
 @admin.register(Like)
