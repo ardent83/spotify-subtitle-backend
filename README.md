@@ -15,3 +15,5 @@ A Django-based REST API powering a browser extension for community-driven subtit
 - Authentication: dj-rest-auth, django-allauth
 - API Docs: drf-spectacular (Swagger UI)
 - Deployment: Docker, Gunicorn, Whitenoise
+
+#### FrontEnd: [spotify-subtitle-frontend](https://github.com/ardent83/spotify-subtitle-frontend)
